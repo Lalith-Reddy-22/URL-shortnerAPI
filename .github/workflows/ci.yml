@@ -47,7 +47,7 @@ jobs:
       # golangci-lint bundles many linters (errcheck, staticcheck, gosec, …).
       # Pinned to a specific version for reproducibility.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.13.2
           args: --timeout=5m
