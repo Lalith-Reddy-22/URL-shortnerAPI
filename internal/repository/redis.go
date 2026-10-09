@@ -63,6 +63,18 @@ func (r *Redis) DeleteLink(ctx context.Context, code string) error {
 	return r.client.Del(ctx, linkKey(code)).Err()
 }
 
+// Increment is INCR + EXPIRE NX so the first hit in a window sets TTL
+// and later hits only count. Used by per-IP rate limiting.
+func (r *Redis) Increment(ctx context.Context, key string, ttl time.Duration) (int64, error) {
+	pipe := r.client.TxPipeline()
+	incr := pipe.Incr(ctx, key)
+	pipe.ExpireNX(ctx, key, ttl)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, err
+	}
+	return incr.Val(), nil
+}
+
 func linkKey(code string) string {
 	return linkKeyPrefix + code
 }

@@ -75,6 +75,12 @@ func main() {
 	linkH := handler.Links{Links: linkSvc}
 
 	r := chi.NewRouter()
+	r.Use(mw.RequestID)
+	r.Use(mw.Logger)
+	r.Use(mw.Recoverer)
+	r.Use(mw.Timeout(cfg.RequestTimeout))
+	r.Use(mw.RateLimit(cache, cfg.RateLimitPerMinute))
+
 	r.Get("/healthz", handler.Health)
 	r.Method(http.MethodGet, "/readyz", handler.Ready{
 		DB:      db,
