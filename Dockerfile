@@ -1,7 +1,7 @@
 # ── Stage 1: build ──────────────────────────────────────────────────────────
 # Use the official Go image to compile a fully-static binary.
 # CGO_ENABLED=0 + GOFLAGS=-trimpath produce a portable, reproducible artifact.
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
 
