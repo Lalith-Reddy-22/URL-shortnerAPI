@@ -19,12 +19,11 @@ linters:
     - gosec         # security issues (SQL injection, weak crypto, …)
     - misspell      # common spelling mistakes in comments/strings
     - revive        # idiomatic Go style
-
-linters-settings:
-  gosec:
-    # G401/G501 flag weak hash functions; we only use sha256+bcrypt, so these
-    # would fire on test helpers. Keep them enabled — fix, don't suppress.
-    excludes: []
+  settings:
+    gosec:
+      # G401/G501 flag weak hash functions; we only use sha256+bcrypt, so these
+      # would fire on test helpers. Keep them enabled — fix, don't suppress.
+      excludes: []
 
 issues:
   # Raise the per-linter limit so we see all issues at once.
