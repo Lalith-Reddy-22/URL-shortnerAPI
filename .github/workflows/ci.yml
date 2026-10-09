@@ -51,6 +51,7 @@ jobs:
         with:
           version: v2.13.2
           args: --timeout=5m
+          skip-cache: true
 
   # ── 2. Test (runs on every PR and push) ─────────────────────────────────────
   test:
