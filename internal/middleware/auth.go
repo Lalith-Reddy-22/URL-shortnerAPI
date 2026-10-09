@@ -13,6 +13,12 @@ type ctxKey int
 
 const userIDKey ctxKey = 1
 
+// WithUserID stores the authenticated user id. JWTAuth calls this;
+// tests can call it directly without minting a token.
+func WithUserID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, userIDKey, id)
+}
+
 // UserIDFromContext is how handlers read the authenticated user.
 func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 	id, ok := ctx.Value(userIDKey).(uuid.UUID)
@@ -35,8 +41,7 @@ func JWTAuth(auth *service.Auth) func(http.Handler) http.Handler {
 				writeError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
-			ctx := context.WithValue(r.Context(), userIDKey, id)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r.WithContext(WithUserID(r.Context(), id)))
 		})
 	}
 }

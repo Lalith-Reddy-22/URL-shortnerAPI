@@ -15,4 +15,5 @@ var (
 	ErrLinkExpired        = errors.New("link expired")
 	ErrLinkNotFound       = errors.New("link not found")
 	ErrCodeCollision      = errors.New("could not allocate a unique short code")
+	ErrForbidden          = errors.New("forbidden")
 )

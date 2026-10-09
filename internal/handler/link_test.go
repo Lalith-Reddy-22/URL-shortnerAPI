@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/lalith/urlshortener/internal/middleware"
 	"github.com/lalith/urlshortener/internal/model"
 	"github.com/lalith/urlshortener/internal/repository"
 	"github.com/lalith/urlshortener/internal/service"
@@ -34,11 +35,24 @@ func (s *linkStub) GetByCode(_ context.Context, code string) (model.Link, error)
 	}
 	return l, nil
 }
-func (s *linkStub) ListByUser(context.Context, uuid.UUID, int, int) ([]model.Link, int, error) {
-	return nil, 0, nil
+func (s *linkStub) ListByUser(_ context.Context, userID uuid.UUID, _, _ int) ([]model.Link, int, error) {
+	var all []model.Link
+	for _, l := range s.byCode {
+		if l.UserID == userID {
+			all = append(all, l)
+		}
+	}
+	return all, len(all), nil
 }
-func (s *linkStub) DeleteByCode(context.Context, uuid.UUID, string) error { return nil }
-func (s *linkStub) AddClicks(context.Context, []model.ClickDelta) error   { return nil }
+func (s *linkStub) DeleteByCode(_ context.Context, userID uuid.UUID, code string) error {
+	l, ok := s.byCode[code]
+	if !ok || l.UserID != userID {
+		return repository.ErrNotFound
+	}
+	delete(s.byCode, code)
+	return nil
+}
+func (s *linkStub) AddClicks(context.Context, []model.ClickDelta) error { return nil }
 
 type cacheStub struct {
 	data map[string]model.CachedLink
@@ -104,5 +118,47 @@ func TestRedirectNotFoundAndFound(t *testing.T) {
 	}
 	if loc := rec.Header().Get("Location"); loc != "https://example.com/x" {
 		t.Fatalf("Location = %s", loc)
+	}
+}
+
+func TestListAndStatsAndDelete(t *testing.T) {
+	owner := uuid.New()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	h := Links{Links: &service.Links{
+		Store: &linkStub{byCode: map[string]model.Link{
+			"abc": {UserID: owner, Code: "abc", OriginalURL: "https://example.com", CreatedAt: now, ClickCount: 4},
+		}},
+		Cache: &cacheStub{data: map[string]model.CachedLink{}},
+		TTL:   time.Hour,
+	}}
+
+	r := chi.NewRouter()
+	r.Get("/api/v1/links", h.List)
+	r.Get("/api/v1/links/{code}/stats", h.Stats)
+	r.Delete("/api/v1/links/{code}", h.Delete)
+
+	withUser := func(req *http.Request) *http.Request {
+		return req.WithContext(middleware.WithUserID(req.Context(), owner))
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/links/abc/stats", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, withUser(req))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"clicks":4`) {
+		t.Fatalf("stats status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/links?page=1&page_size=20", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, withUser(req))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"total":1`) {
+		t.Fatalf("list status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/links/abc", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, withUser(req))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete status=%d", rec.Code)
 	}
 }

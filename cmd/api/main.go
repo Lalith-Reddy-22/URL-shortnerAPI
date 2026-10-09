@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -56,10 +57,20 @@ func main() {
 		Cost:   cfg.BcryptCost,
 	}
 	authH := handler.Auth{Auth: authSvc}
+	clicks := service.NewClickCounter(db, 4096, 100, time.Second, cfg.RequestTimeout)
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	var workerWG sync.WaitGroup
+	workerWG.Add(1)
+	go func() {
+		defer workerWG.Done()
+		clicks.Run(workerCtx)
+	}()
+
 	linkSvc := &service.Links{
-		Store: db,
-		Cache: cache,
-		TTL:   cfg.CacheTTL,
+		Store:  db,
+		Cache:  cache,
+		Clicks: clicks,
+		TTL:    cfg.CacheTTL,
 	}
 	linkH := handler.Links{Links: linkSvc}
 
@@ -78,6 +89,9 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(mw.JWTAuth(authSvc))
 			r.Post("/shorten", linkH.Shorten)
+			r.Get("/links", linkH.List)
+			r.Get("/links/{code}/stats", linkH.Stats)
+			r.Delete("/links/{code}", linkH.Delete)
 		})
 	})
 
@@ -115,5 +129,7 @@ func main() {
 		slog.Error("graceful shutdown", "err", err)
 		os.Exit(1)
 	}
+	stopWorker()
+	workerWG.Wait()
 	slog.Info("stopped")
 }

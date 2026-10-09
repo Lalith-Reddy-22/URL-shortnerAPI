@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -34,11 +35,45 @@ func (m *linkMem) GetByCode(_ context.Context, code string) (model.Link, error) 
 	}
 	return l, nil
 }
-func (m *linkMem) ListByUser(context.Context, uuid.UUID, int, int) ([]model.Link, int, error) {
-	return nil, 0, nil
+func (m *linkMem) ListByUser(_ context.Context, userID uuid.UUID, limit, offset int) ([]model.Link, int, error) {
+	var all []model.Link
+	for _, l := range m.byCode {
+		if l.UserID == userID {
+			all = append(all, l)
+		}
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].CreatedAt.After(all[j].CreatedAt) })
+	total := len(all)
+	if offset > total {
+		return []model.Link{}, total, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return all[offset:end], total, nil
 }
-func (m *linkMem) DeleteByCode(context.Context, uuid.UUID, string) error { return nil }
-func (m *linkMem) AddClicks(context.Context, []model.ClickDelta) error   { return nil }
+func (m *linkMem) DeleteByCode(_ context.Context, userID uuid.UUID, code string) error {
+	l, ok := m.byCode[code]
+	if !ok || l.UserID != userID {
+		return repository.ErrNotFound
+	}
+	delete(m.byCode, code)
+	return nil
+}
+func (m *linkMem) AddClicks(_ context.Context, deltas []model.ClickDelta) error {
+	for _, d := range deltas {
+		l, ok := m.byCode[d.Code]
+		if !ok {
+			continue
+		}
+		l.ClickCount += d.Count
+		at := d.LastClick
+		l.LastClickedAt = &at
+		m.byCode[d.Code] = l
+	}
+	return nil
+}
 
 type cacheMem struct {
 	data map[string]model.CachedLink
@@ -160,6 +195,42 @@ func TestResolveCacheAsideAndExpiry(t *testing.T) {
 	_, err = svc.Resolve(context.Background(), "missing")
 	if !errors.Is(err, ErrLinkNotFound) {
 		t.Fatalf("missing err = %v", err)
+	}
+}
+
+func TestStatsListDeleteOwner(t *testing.T) {
+	owner := uuid.New()
+	other := uuid.New()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	store := &linkMem{byCode: map[string]model.Link{
+		"a": {UserID: owner, Code: "a", OriginalURL: "https://a.example", CreatedAt: now.Add(time.Minute), ClickCount: 3},
+		"b": {UserID: owner, Code: "b", OriginalURL: "https://b.example", CreatedAt: now},
+		"c": {UserID: other, Code: "c", OriginalURL: "https://c.example", CreatedAt: now},
+	}}
+	cache := &cacheMem{data: map[string]model.CachedLink{"a": {OriginalURL: "https://a.example"}}}
+	svc := &Links{Store: store, Cache: cache, TTL: time.Hour}
+
+	got, err := svc.Stats(context.Background(), owner, "a")
+	if err != nil || got.ClickCount != 3 {
+		t.Fatalf("stats = %+v err=%v", got, err)
+	}
+	if _, err := svc.Stats(context.Background(), other, "a"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("other stats err = %v", err)
+	}
+
+	list, err := svc.List(context.Background(), owner, 1, 1)
+	if err != nil || list.Total != 2 || len(list.Items) != 1 || list.Items[0].Code != "a" {
+		t.Fatalf("list = %+v err=%v", list, err)
+	}
+
+	if err := svc.Delete(context.Background(), owner, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cache.data["a"]; ok {
+		t.Fatal("expected cache key removed")
+	}
+	if _, err := svc.Stats(context.Background(), owner, "a"); !errors.Is(err, ErrLinkNotFound) {
+		t.Fatalf("deleted stats err = %v", err)
 	}
 }
 

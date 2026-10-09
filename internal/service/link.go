@@ -27,6 +27,7 @@ var reservedAliases = map[string]struct{}{
 type Links struct {
 	Store        repository.LinkStore
 	Cache        repository.CacheStore
+	Clicks       *ClickCounter
 	TTL          time.Duration
 	Now          func() time.Time
 	GenerateCode func() (string, error)
@@ -114,6 +115,7 @@ func (s *Links) Resolve(ctx context.Context, code string) (string, error) {
 			_ = s.Cache.DeleteLink(ctx, code)
 			return "", ErrLinkExpired
 		}
+		s.recordClick(code)
 		return cached.OriginalURL, nil
 	}
 
@@ -134,7 +136,74 @@ func (s *Links) Resolve(ctx context.Context, code string) (string, error) {
 		ExpiresAt:   link.ExpiresAt,
 	}, ttl)
 
+	s.recordClick(code)
 	return link.OriginalURL, nil
+}
+
+func (s *Links) recordClick(code string) {
+	if s.Clicks != nil {
+		s.Clicks.Record(code)
+	}
+}
+
+func (s *Links) Stats(ctx context.Context, userID uuid.UUID, code string) (model.Link, error) {
+	return s.ownedLink(ctx, userID, code)
+}
+
+type ListResult struct {
+	Items    []model.Link
+	Total    int
+	Page     int
+	PageSize int
+}
+
+func (s *Links) List(ctx context.Context, userID uuid.UUID, page, pageSize int) (ListResult, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	offset := (page - 1) * pageSize
+	items, total, err := s.Store.ListByUser(ctx, userID, pageSize, offset)
+	if err != nil {
+		return ListResult{}, err
+	}
+	if items == nil {
+		items = []model.Link{}
+	}
+	return ListResult{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+}
+
+func (s *Links) Delete(ctx context.Context, userID uuid.UUID, code string) error {
+	if _, err := s.ownedLink(ctx, userID, code); err != nil {
+		return err
+	}
+	if err := s.Store.DeleteByCode(ctx, userID, code); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrLinkNotFound
+		}
+		return err
+	}
+	_ = s.Cache.DeleteLink(ctx, code)
+	return nil
+}
+
+func (s *Links) ownedLink(ctx context.Context, userID uuid.UUID, code string) (model.Link, error) {
+	link, err := s.Store.GetByCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return model.Link{}, ErrLinkNotFound
+		}
+		return model.Link{}, err
+	}
+	if link.UserID != userID {
+		return model.Link{}, ErrForbidden
+	}
+	return link, nil
 }
 
 func (s *Links) cacheTTL(expiresAt *time.Time) time.Duration {
