@@ -1,4 +1,4 @@
-.PHONY: run deps tidy test fmt vet lint cover build docker compose-up compose-down migrate-up migrate-down
+.PHONY: run deps tidy test fmt vet lint cover build docker compose-up compose-down migrate-up migrate-down benchmark
 
 MIGRATE=go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.3
 
@@ -56,3 +56,8 @@ test-race:
 # Run golangci-lint (must be installed: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1)
 lint:
 	golangci-lint run --timeout 5m
+
+# Redirect latency benchmark (requires: hey, jq, running stack via make compose-up)
+# Results are printed to stdout and saved to docs/benchmark_raw.md.
+benchmark:
+	./scripts/benchmark.sh
