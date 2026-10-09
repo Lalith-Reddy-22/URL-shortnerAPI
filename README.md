@@ -331,5 +331,18 @@ docker pull ghcr.io/<your-github-username>/url-shortener:latest
 
 ## Benchmark
 
-See **Phase 10** — [`docs/benchmark.md`](./docs/benchmark.md) for redirect
-latency numbers with and without Redis.
+See [`docs/benchmark.md`](./docs/benchmark.md) for redirect latency numbers comparing Redis cache HIT vs. cold Postgres MISS (run with `hey`, 2 000 requests, 50 concurrent workers).
+
+Quick numbers from an Apple M2 Pro (localhost Docker):
+
+| Metric | Cache HIT (Redis) | Cold MISS (Postgres) |
+|---|---|---|
+| Requests/sec | **4 149** | 1 620 |
+| p50 latency | **0.9 ms** | 3.0 ms |
+| p99 latency | **3.4 ms** | 6.7 ms |
+
+Run it yourself:
+```bash
+go install github.com/rakyll/hey@latest   # one-time
+make benchmark
+```
