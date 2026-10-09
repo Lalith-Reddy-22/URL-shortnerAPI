@@ -6,9 +6,9 @@ on:
   push:
     branches: ["main"]
 
-# ── Global env ────────────────────────────────────────────────────────────────
+# ── Global env ───────────────────────────────────────────────────────────
 env:
-  GO_VERSION: "1.22"
+  GO_VERSION: "1.26.0"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -23,7 +23,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          cache: false
+
+      - name: Clean stale Go module cache
+        run: go clean -modcache || true
+
+      - name: Download dependencies
+        run: go mod download
 
       # gofmt: exits non-zero if any file would change.
       - name: gofmt check
@@ -97,7 +103,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          cache: false
+
+      - name: Clean stale Go module cache
+        run: go clean -modcache || true
+
+      - name: Download dependencies
+        run: go mod download
 
       # Apply migrations so the DB schema is ready before tests run.
       - name: Run migrations
