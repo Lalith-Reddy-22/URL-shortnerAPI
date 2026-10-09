@@ -56,6 +56,12 @@ func main() {
 		Cost:   cfg.BcryptCost,
 	}
 	authH := handler.Auth{Auth: authSvc}
+	linkSvc := &service.Links{
+		Store: db,
+		Cache: cache,
+		TTL:   cfg.CacheTTL,
+	}
+	linkH := handler.Links{Links: linkSvc}
 
 	r := chi.NewRouter()
 	r.Get("/healthz", handler.Health)
@@ -69,12 +75,14 @@ func main() {
 		r.Post("/auth/register", authH.Register)
 		r.Post("/auth/login", authH.Login)
 
-		// Protected routes (shorten/stats/list/delete) mount here in later phases.
 		r.Group(func(r chi.Router) {
 			r.Use(mw.JWTAuth(authSvc))
-			_ = r
+			r.Post("/shorten", linkH.Shorten)
 		})
 	})
+
+	// Registered last so /healthz, /readyz, and /api/v1 are not captured as codes.
+	r.Get("/{code}", linkH.Redirect)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

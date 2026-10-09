@@ -31,6 +31,10 @@ type CachedLink struct {
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 }
 
+func (c CachedLink) Expired(now time.Time) bool {
+	return c.ExpiresAt != nil && !c.ExpiresAt.After(now)
+}
+
 // ClickDelta is one batched increment flushed by the async click worker.
 type ClickDelta struct {
 	Code      string

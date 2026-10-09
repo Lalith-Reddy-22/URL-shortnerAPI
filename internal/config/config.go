@@ -23,6 +23,7 @@ type Config struct {
 	RedisAddr     string
 	RedisPassword string
 	RedisDB       int
+	CacheTTL      time.Duration
 
 	// Auth (used in later phases; loaded now so env is the single source of truth).
 	JWTSecret          string
@@ -53,6 +54,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.JWTExpiry, err = getenvDuration("JWT_EXPIRY", 24*time.Hour); err != nil {
+		return Config{}, err
+	}
+	if cfg.CacheTTL, err = getenvDuration("CACHE_TTL", time.Hour); err != nil {
 		return Config{}, err
 	}
 
