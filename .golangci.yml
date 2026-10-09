@@ -1,11 +1,11 @@
-# golangci-lint configuration.
+# golangci-lint v2 configuration.
 # Keep the enabled set small and deliberate — every linter here
 # catches a real class of bug or style issue.
 run:
   timeout: 5m
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck      # flag unchecked errors
     - gosimple      # simplification suggestions
