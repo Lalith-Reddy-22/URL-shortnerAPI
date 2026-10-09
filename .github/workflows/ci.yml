@@ -56,7 +56,7 @@ jobs:
     # Spin up real Postgres and Redis for integration-style repository tests.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: ghcr.io/library/postgres:16-alpine
         env:
           POSTGRES_USER: urlshortener
           POSTGRES_PASSWORD: urlshortener
@@ -70,7 +70,7 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:7-alpine
+        image: ghcr.io/library/redis:7-alpine
         ports:
           - 6379:6379
         options: >-
