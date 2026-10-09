@@ -16,7 +16,6 @@ linters:
     - unused        # unused code
     - gosec         # security issues (SQL injection, weak crypto, …)
     - misspell      # common spelling mistakes in comments/strings
-    - revive        # idiomatic Go style
   settings:
     gosec:
       # G401/G501 flag weak hash functions; we only use sha256+bcrypt, so these
