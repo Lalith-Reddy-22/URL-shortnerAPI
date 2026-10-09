@@ -1,6 +1,8 @@
 # golangci-lint v2 configuration.
 # Keep the enabled set small and deliberate — every linter here
 # catches a real class of bug or style issue.
+version: "2"
+
 run:
   timeout: 5m
 
