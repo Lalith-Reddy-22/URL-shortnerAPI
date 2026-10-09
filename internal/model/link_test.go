@@ -23,9 +23,13 @@ func TestLinkExpired(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := Link{ExpiresAt: tt.exp}.Expired(now)
-			if got != tt.want {
-				t.Fatalf("Expired() = %v, want %v", got, tt.want)
+			link := Link{ExpiresAt: tt.exp}
+			if got := link.Expired(now); got != tt.want {
+				t.Fatalf("Link.Expired() = %v, want %v", got, tt.want)
+			}
+			cached := CachedLink{ExpiresAt: tt.exp}
+			if got := cached.Expired(now); got != tt.want {
+				t.Fatalf("CachedLink.Expired() = %v, want %v", got, tt.want)
 			}
 		})
 	}

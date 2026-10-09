@@ -127,4 +127,42 @@ func TestIssueAndParseToken(t *testing.T) {
 	if got != id {
 		t.Fatalf("id = %s, want %s", got, id)
 	}
+	if _, err := auth.ParseToken("not-a-jwt"); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("bad token err=%v", err)
+	}
+}
+
+func TestRegisterAndLoginOK(t *testing.T) {
+	id := uuid.New()
+	var storedHash string
+	auth := newTestAuth(userStub{
+		createFn: func(_ context.Context, email, hash string) (model.User, error) {
+			storedHash = hash
+			return model.User{ID: id, Email: email, PasswordHash: hash}, nil
+		},
+		getFn: func(context.Context, string) (model.User, error) {
+			return model.User{ID: id, Email: "a@b.com", PasswordHash: storedHash}, nil
+		},
+	})
+	u, err := auth.Register(context.Background(), "a@b.com", "password1")
+	if err != nil || u.ID != id {
+		t.Fatalf("register %+v err=%v", u, err)
+	}
+	tok, err := auth.Login(context.Background(), "a@b.com", "password1")
+	if err != nil || tok == "" {
+		t.Fatalf("login tok=%s err=%v", tok, err)
+	}
+	if _, err := auth.Login(context.Background(), "not-email", "password1"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("bad email login err=%v", err)
+	}
+}
+
+func TestValidatePasswordLong(t *testing.T) {
+	long := make([]byte, 73)
+	for i := range long {
+		long[i] = 'a'
+	}
+	if err := validatePassword(string(long)); !errors.Is(err, ErrInvalidPassword) {
+		t.Fatalf("err=%v", err)
+	}
 }

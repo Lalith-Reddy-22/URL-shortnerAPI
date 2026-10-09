@@ -13,9 +13,19 @@ import (
 	"github.com/lalith/urlshortener/internal/model"
 )
 
+// pgxPool is the subset of *pgxpool.Pool the repo uses.
+// Tests inject a mock; production uses a real pool.
+type pgxPool interface {
+	Ping(ctx context.Context) error
+	Close()
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // Postgres implements UserStore and LinkStore with pgxpool.
 type Postgres struct {
-	pool *pgxpool.Pool
+	pool pgxPool
 }
 
 func NewPostgres(ctx context.Context, databaseURL string) (*Postgres, error) {

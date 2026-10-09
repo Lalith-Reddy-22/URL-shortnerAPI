@@ -20,6 +20,9 @@ type userMem struct {
 }
 
 func (m *userMem) CreateUser(_ context.Context, email, passwordHash string) (model.User, error) {
+	if _, ok := m.users[email]; ok {
+		return model.User{}, repository.ErrDuplicate
+	}
 	u := model.User{ID: uuid.New(), Email: email, PasswordHash: passwordHash, CreatedAt: time.Now()}
 	m.users[email] = u
 	return u, nil
@@ -74,5 +77,37 @@ func TestRegisterBadJSON(t *testing.T) {
 	h.Register(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d", rec.Code)
+	}
+}
+
+func TestAuthErrorPaths(t *testing.T) {
+	h := testAuthHandler()
+
+	rec := httptest.NewRecorder()
+	h.Register(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"email":"bad","password":"password1"}`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad email %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	h.Register(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"email":"a@b.com","password":"password1"}`)))
+	if rec.Code != http.StatusCreated {
+		t.Fatal(rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
+	h.Register(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"email":"a@b.com","password":"password1"}`)))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("dup %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	h.Login(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("login json %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.Login(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"email":"a@b.com","password":"wrongpass"}`)))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("login 401 %d body=%s", rec.Code, rec.Body.String())
 	}
 }

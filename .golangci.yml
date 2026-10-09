@@ -1,0 +1,30 @@
+# golangci-lint configuration.
+# Keep the enabled set small and deliberate — every linter here
+# catches a real class of bug or style issue.
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck      # flag unchecked errors
+    - gosimple      # simplification suggestions
+    - govet         # go vet checks
+    - ineffassign   # dead assignments
+    - staticcheck   # comprehensive static analysis
+    - unused        # unused code
+    - gofmt         # formatting (fail if gofmt would change a file)
+    - gosec         # security issues (SQL injection, weak crypto, …)
+    - misspell      # common spelling mistakes in comments/strings
+    - revive        # idiomatic Go style
+
+linters-settings:
+  gosec:
+    # G401/G501 flag weak hash functions; we only use sha256+bcrypt, so these
+    # would fire on test helpers. Keep them enabled — fix, don't suppress.
+    excludes: []
+
+issues:
+  # Raise the per-linter limit so we see all issues at once.
+  max-issues-per-linter: 50
+  max-same-issues: 10

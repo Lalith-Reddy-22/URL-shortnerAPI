@@ -123,4 +123,48 @@ func TestClientIP(t *testing.T) {
 	if got := clientIP(req); got != "10.0.0.1" {
 		t.Fatalf("xff = %s", got)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "127.0.0.1:9"
+	if got := clientIP(req); got != "127.0.0.1" {
+		t.Fatalf("remote = %s", got)
+	}
+}
+
+func TestLoggerAndTimeoutWrite(t *testing.T) {
+	ok := Logger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	rec := httptest.NewRecorder()
+	ok.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logger %d", rec.Code)
+	}
+
+	skip := Logger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	rec = httptest.NewRecorder()
+	skip.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("skip %d", rec.Code)
+	}
+
+	fast := Timeout(time.Second)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	rec = httptest.NewRecorder()
+	fast.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("timeout write %d", rec.Code)
+	}
+
+	limited := RateLimit(&stubCounter{}, 0)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	rec = httptest.NewRecorder()
+	limited.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("default limit %d", rec.Code)
+	}
 }

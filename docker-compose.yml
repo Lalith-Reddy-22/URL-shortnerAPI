@@ -1,6 +1,22 @@
-# Local dependencies only. The API still runs on the host via `make run`
-# (phase 8 will add the API container).
 services:
+  # The API container – built from the local Dockerfile.
+  # Run `make compose-up` to start everything, then `make migrate-up` (once) to apply migrations.
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      # Override the localhost addresses so the container reaches its siblings.
+      DATABASE_URL: postgres://urlshortener:urlshortener@postgres:5432/urlshortener?sslmode=disable
+      REDIS_ADDR: redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
   postgres:
     image: postgres:16-alpine
     environment:

@@ -234,6 +234,48 @@ func TestStatsListDeleteOwner(t *testing.T) {
 	}
 }
 
+func TestValidateAliasAndCacheTTLAndListClamp(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	future := now.Add(30 * time.Minute)
+	svc := &Links{
+		Store: &linkMem{byCode: map[string]model.Link{}},
+		Cache: &cacheMem{data: map[string]model.CachedLink{}},
+		TTL:   time.Hour,
+		Now:   func() time.Time { return now },
+	}
+
+	if err := validateAlias("healthz"); !errors.Is(err, ErrInvalidAlias) {
+		t.Fatalf("reserved err=%v", err)
+	}
+	if err := validateAlias("ok"); err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.cacheTTL(&future); got != 30*time.Minute {
+		t.Fatalf("ttl=%s", got)
+	}
+	if got := svc.cacheTTL(nil); got != time.Hour {
+		t.Fatalf("default ttl=%s", got)
+	}
+
+	list, err := svc.List(context.Background(), uuid.New(), 0, 0)
+	if err != nil || list.Page != 1 || list.PageSize != 20 {
+		t.Fatalf("clamp %+v err=%v", list, err)
+	}
+	list, err = svc.List(context.Background(), uuid.New(), 1, 500)
+	if err != nil || list.PageSize != 100 {
+		t.Fatalf("max page size %+v", list)
+	}
+
+	clicks := NewClickCounter(svc.Store, 0, 0, time.Hour, time.Second)
+	svc.Clicks = clicks
+	svc.recordClick("x")
+
+	_, err = svc.Shorten(context.Background(), ShortenInput{UserID: uuid.New(), URL: "https://example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRandomCode(t *testing.T) {
 	t.Parallel()
 	code, err := RandomCode(7)

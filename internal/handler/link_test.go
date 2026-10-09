@@ -161,4 +161,106 @@ func TestListAndStatsAndDelete(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("delete status=%d", rec.Code)
 	}
+
+	other := uuid.New()
+	h.Links.Store = &linkStub{byCode: map[string]model.Link{
+		"abc": {UserID: owner, Code: "abc", OriginalURL: "https://example.com", CreatedAt: now},
+	}}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/links/abc/stats", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req.WithContext(middleware.WithUserID(req.Context(), other)))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("forbidden status=%d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	h.List(rec, httptest.NewRequest(http.MethodGet, "/api/v1/links", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("list unauth %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.Delete(rec, httptest.NewRequest(http.MethodDelete, "/api/v1/links/abc", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("delete unauth %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.Stats(rec, httptest.NewRequest(http.MethodGet, "/api/v1/links/abc/stats", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("stats unauth %d", rec.Code)
+	}
+}
+
+func TestShortenTable(t *testing.T) {
+	owner := uuid.New()
+	h := Links{Links: &service.Links{
+		Store:        &linkStub{byCode: map[string]model.Link{}},
+		Cache:        &cacheStub{data: map[string]model.CachedLink{}},
+		TTL:          time.Hour,
+		GenerateCode: func() (string, error) { return "abcdefg", nil },
+	}}
+
+	tests := []struct {
+		name   string
+		body   string
+		want   int
+		authed bool
+	}{
+		{name: "created", body: `{"url":"https://example.com"}`, want: http.StatusCreated, authed: true},
+		{name: "bad json", body: `{`, want: http.StatusBadRequest, authed: true},
+		{name: "bad url", body: `{"url":"ftp://x"}`, want: http.StatusBadRequest, authed: true},
+		{name: "bad alias", body: `{"url":"https://example.com","custom_alias":"no spaces"}`, want: http.StatusBadRequest, authed: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/shorten", strings.NewReader(tt.body))
+			if tt.authed {
+				req = req.WithContext(middleware.WithUserID(req.Context(), owner))
+			}
+			rec := httptest.NewRecorder()
+			h.Shorten(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+
+	_, err := h.Links.Shorten(context.Background(), service.ShortenInput{UserID: owner, URL: "https://example.com", CustomAlias: "taken"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/shorten", strings.NewReader(`{"url":"https://example.com","custom_alias":"taken"}`))
+	req = req.WithContext(middleware.WithUserID(req.Context(), owner))
+	rec := httptest.NewRecorder()
+	h.Shorten(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("conflict status=%d", rec.Code)
+	}
+}
+
+func TestRedirectExpired(t *testing.T) {
+	past := time.Now().Add(-time.Hour)
+	h := Links{Links: &service.Links{
+		Store: &linkStub{byCode: map[string]model.Link{
+			"old": {Code: "old", OriginalURL: "https://example.com", ExpiresAt: &past},
+		}},
+		Cache: &cacheStub{data: map[string]model.CachedLink{}},
+		TTL:   time.Hour,
+	}}
+	r := chi.NewRouter()
+	r.Get("/{code}", h.Redirect)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/old", nil))
+	if rec.Code != http.StatusGone {
+		t.Fatalf("status=%d", rec.Code)
+	}
+}
+
+func TestQueryInt(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?page=2&page_size=nope", nil)
+	if queryInt(req, "page", 1) != 2 {
+		t.Fatal("page")
+	}
+	if queryInt(req, "page_size", 20) != 20 {
+		t.Fatal("fallback")
+	}
 }
